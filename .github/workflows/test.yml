@@ -25,4 +25,4 @@ jobs:
           cache: 'maven'
 
       - name: Build with Maven
-        run: mvn -B -Drevision=test clean verify
+        run: mvn -B -Drevision=test -Dgpg.skip=true clean verify
