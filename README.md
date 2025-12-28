@@ -3,17 +3,12 @@
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.deemru/shamir255.svg)](https://search.maven.org/artifact/io.github.deemru/shamir255)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Shamir255** is a Java implementation of Shamir's Secret Sharing algorithm for sensitive information up to 255 bytes using a 2048-bit MODP group.
+[Shamir255](https://github.com/deemru/Shamir255-Java) implements [Shamir's Secret Sharing](https://en.wikipedia.org/wiki/Shamir%27s_secret_sharing) algorithm over [GF(256)](https://en.wikipedia.org/wiki/Finite_field_arithmetic).
 
-This implementation is compatible with the [PHP version](https://github.com/deemru/Shamir255) and allows secure distribution of secrets across multiple shares, where a minimum threshold is required to reconstruct the original secret.
-
-## Features
-
-- **Zero dependencies** - uses only standard Java library
-- **Universal compatibility** - works with Java 8+, Kotlin, Android
-- **Cryptographically secure** - uses 2048-bit MODP Group from [RFC 3526](https://www.ietf.org/rfc/rfc3526.html#section-3)
-- **Simple API** - just two static methods: `share()` and `recover()`
-- **Cross-platform** - compatible with PHP implementation
+- Pure Java implementation (no external dependencies)
+- Share size equals secret size (efficient storage)
+- Supports secrets of any length
+- Up to 255 shares with threshold from 2 to 255
 
 ## Installation
 
@@ -116,10 +111,10 @@ assert(sensitive == result) // true
 
 ### Key Properties
 
-- **Secret size**: Up to 255 bytes
-- **Share size**: Exactly 256 bytes each
-- **Threshold**: Minimum 2 shares required
-- **Security**: Based on 2048-bit MODP Group (RFC 3526)
+- **Secret size**: Any length
+- **Share size**: Same as secret size
+- **Threshold**: Minimum 2, maximum 255 shares
+- **Total shares**: Maximum 255
 
 ### Example Scenarios
 
@@ -146,28 +141,22 @@ Map<Integer, byte[]> shares = Shamir255.share(secret, 3, 5);
 Splits a secret into multiple shares.
 
 **Parameters:**
-- `secret` - The secret to share (up to 255 bytes)
-- `needed` - Minimum number of shares required to recover the secret (must be at least 2)
-- `total` - Total number of shares to generate
+- `secret` - The secret to share (must not be empty)
+- `needed` - Minimum number of shares required to recover the secret (2..total)
+- `total` - Total number of shares to generate (needed..255)
 
 **Returns:**
-- `Map<Integer, byte[]>` - Map of share indices (1-based) to share bytes (each 256 bytes)
-
-**Throws:**
-- `IllegalArgumentException` - If parameters are invalid
+- `Map<Integer, byte[]>` - Map of share indices (1-based) to share bytes, or `null` on failure
 
 ### `recover(Map<Integer, byte[]> shares)`
 
 Recovers the original secret from a set of shares.
 
 **Parameters:**
-- `shares` - Map of share indices to share bytes (must have at least 'needed' shares)
+- `shares` - Map of share indices to share bytes (must have at least 2 shares with valid indices 1..255)
 
 **Returns:**
-- `byte[]` - The recovered secret
-
-**Throws:**
-- `IllegalArgumentException` - If shares are invalid or recovery fails
+- `byte[]` - The recovered secret, or `null` on failure
 
 ## Requirements
 
@@ -181,7 +170,7 @@ This Java implementation is **compatible** with the [PHP version](https://github
 ## Security Notes
 
 - Shares are generated using `SecureRandom` for cryptographic security
-- The implementation uses a 2048-bit MODP group for mathematical operations
+- The implementation uses GF(256) with primitive polynomial 0x11D from [RFC 6330](https://www.rfc-editor.org/rfc/rfc6330)
 - Each share reveals no information about the secret by itself
 - The secret can only be recovered with the minimum threshold of shares
 
@@ -195,7 +184,7 @@ mvn test
 
 The test suite includes:
 - Basic functionality tests
-- Edge cases (empty secrets, maximum size)
+- Edge cases (single byte, zero bytes, maximum shares)
 - Cross-compatibility tests with PHP implementation
 - Random testing with various configurations
 
@@ -213,7 +202,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Related Projects
 
 - [Shamir255 (PHP)](https://github.com/deemru/Shamir255) - Original PHP implementation
-- [RFC 3526](https://www.ietf.org/rfc/rfc3526.html) - 2048-bit MODP Group specification
+- [RFC 6330](https://www.rfc-editor.org/rfc/rfc6330) - GF(256) specification
 - [How to share a secret (Shamir, 1979)](https://dl.acm.org/doi/10.1145/359168.359176) - Original paper describing the scheme implemented here
 - [Shamir's Secret Sharing (Wikipedia)](https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing) - Overview of the algorithm
 
@@ -222,4 +211,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [GitHub Repository](https://github.com/deemru/Shamir255-Java)
 - [Maven Central](https://search.maven.org/artifact/io.github.deemru/shamir255)
 - [Issue Tracker](https://github.com/deemru/Shamir255-Java/issues)
-

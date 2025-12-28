@@ -1,136 +1,164 @@
 package io.github.deemru.shamir255;
 
-import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Shamir's Secret Sharing implementation for secrets up to 255 bytes using 2048-bit MODP group.
+ * Shamir's Secret Sharing implementation over GF(256).
  *
  * @see <a href="https://github.com/deemru/Shamir255-Java">Documentation</a>
  */
 public class Shamir255
 {
-    // 2048-bit MODP Group @ https://www.ietf.org/rfc/rfc3526.html#section-3
-    private static final BigInteger PRIME = new BigInteger(
-        "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1" +
-        "29024E088A67CC74020BBEA63B139B22514A08798E3404DD" +
-        "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245" +
-        "E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED" +
-        "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D" +
-        "C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F" +
-        "83655D23DCA3AD961C62F356208552BB9ED529077096966D" +
-        "670C354E4ABC9804F1746C08CA18217C32905E462E36CE3B" +
-        "E39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9" +
-        "DE2BCBF6955817183995497CEA956AE515D2261898FA0510" +
-        "15728E5A8AACAA68FFFFFFFFFFFFFFFF", 16
-    );
+    // GF(256) with primitive polynomial 0x11D
+    // RFC 6330, Section 5.7.3 (https://www.rfc-editor.org/rfc/rfc6330#section-5.7.3)
+    // OCT_EXP[i] = 2 ^ i in GF(256), stored as integers (510 elements)
+    private static final int[] OCT_EXP =
+    {
+        0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1d, 0x3a, 0x74, 0xe8, 0xcd, 0x87, 0x13, 0x26,
+        0x4c, 0x98, 0x2d, 0x5a, 0xb4, 0x75, 0xea, 0xc9, 0x8f, 0x03, 0x06, 0x0c, 0x18, 0x30, 0x60, 0xc0,
+        0x9d, 0x27, 0x4e, 0x9c, 0x25, 0x4a, 0x94, 0x35, 0x6a, 0xd4, 0xb5, 0x77, 0xee, 0xc1, 0x9f, 0x23,
+        0x46, 0x8c, 0x05, 0x0a, 0x14, 0x28, 0x50, 0xa0, 0x5d, 0xba, 0x69, 0xd2, 0xb9, 0x6f, 0xde, 0xa1,
+        0x5f, 0xbe, 0x61, 0xc2, 0x99, 0x2f, 0x5e, 0xbc, 0x65, 0xca, 0x89, 0x0f, 0x1e, 0x3c, 0x78, 0xf0,
+        0xfd, 0xe7, 0xd3, 0xbb, 0x6b, 0xd6, 0xb1, 0x7f, 0xfe, 0xe1, 0xdf, 0xa3, 0x5b, 0xb6, 0x71, 0xe2,
+        0xd9, 0xaf, 0x43, 0x86, 0x11, 0x22, 0x44, 0x88, 0x0d, 0x1a, 0x34, 0x68, 0xd0, 0xbd, 0x67, 0xce,
+        0x81, 0x1f, 0x3e, 0x7c, 0xf8, 0xed, 0xc7, 0x93, 0x3b, 0x76, 0xec, 0xc5, 0x97, 0x33, 0x66, 0xcc,
+        0x85, 0x17, 0x2e, 0x5c, 0xb8, 0x6d, 0xda, 0xa9, 0x4f, 0x9e, 0x21, 0x42, 0x84, 0x15, 0x2a, 0x54,
+        0xa8, 0x4d, 0x9a, 0x29, 0x52, 0xa4, 0x55, 0xaa, 0x49, 0x92, 0x39, 0x72, 0xe4, 0xd5, 0xb7, 0x73,
+        0xe6, 0xd1, 0xbf, 0x63, 0xc6, 0x91, 0x3f, 0x7e, 0xfc, 0xe5, 0xd7, 0xb3, 0x7b, 0xf6, 0xf1, 0xff,
+        0xe3, 0xdb, 0xab, 0x4b, 0x96, 0x31, 0x62, 0xc4, 0x95, 0x37, 0x6e, 0xdc, 0xa5, 0x57, 0xae, 0x41,
+        0x82, 0x19, 0x32, 0x64, 0xc8, 0x8d, 0x07, 0x0e, 0x1c, 0x38, 0x70, 0xe0, 0xdd, 0xa7, 0x53, 0xa6,
+        0x51, 0xa2, 0x59, 0xb2, 0x79, 0xf2, 0xf9, 0xef, 0xc3, 0x9b, 0x2b, 0x56, 0xac, 0x45, 0x8a, 0x09,
+        0x12, 0x24, 0x48, 0x90, 0x3d, 0x7a, 0xf4, 0xf5, 0xf7, 0xf3, 0xfb, 0xeb, 0xcb, 0x8b, 0x0b, 0x16,
+        0x2c, 0x58, 0xb0, 0x7d, 0xfa, 0xe9, 0xcf, 0x83, 0x1b, 0x36, 0x6c, 0xd8, 0xad, 0x47, 0x8e,
+        // Repeat first 255 elements to avoid mod 255 in multiplication
+        0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1d, 0x3a, 0x74, 0xe8, 0xcd, 0x87, 0x13, 0x26,
+        0x4c, 0x98, 0x2d, 0x5a, 0xb4, 0x75, 0xea, 0xc9, 0x8f, 0x03, 0x06, 0x0c, 0x18, 0x30, 0x60, 0xc0,
+        0x9d, 0x27, 0x4e, 0x9c, 0x25, 0x4a, 0x94, 0x35, 0x6a, 0xd4, 0xb5, 0x77, 0xee, 0xc1, 0x9f, 0x23,
+        0x46, 0x8c, 0x05, 0x0a, 0x14, 0x28, 0x50, 0xa0, 0x5d, 0xba, 0x69, 0xd2, 0xb9, 0x6f, 0xde, 0xa1,
+        0x5f, 0xbe, 0x61, 0xc2, 0x99, 0x2f, 0x5e, 0xbc, 0x65, 0xca, 0x89, 0x0f, 0x1e, 0x3c, 0x78, 0xf0,
+        0xfd, 0xe7, 0xd3, 0xbb, 0x6b, 0xd6, 0xb1, 0x7f, 0xfe, 0xe1, 0xdf, 0xa3, 0x5b, 0xb6, 0x71, 0xe2,
+        0xd9, 0xaf, 0x43, 0x86, 0x11, 0x22, 0x44, 0x88, 0x0d, 0x1a, 0x34, 0x68, 0xd0, 0xbd, 0x67, 0xce,
+        0x81, 0x1f, 0x3e, 0x7c, 0xf8, 0xed, 0xc7, 0x93, 0x3b, 0x76, 0xec, 0xc5, 0x97, 0x33, 0x66, 0xcc,
+        0x85, 0x17, 0x2e, 0x5c, 0xb8, 0x6d, 0xda, 0xa9, 0x4f, 0x9e, 0x21, 0x42, 0x84, 0x15, 0x2a, 0x54,
+        0xa8, 0x4d, 0x9a, 0x29, 0x52, 0xa4, 0x55, 0xaa, 0x49, 0x92, 0x39, 0x72, 0xe4, 0xd5, 0xb7, 0x73,
+        0xe6, 0xd1, 0xbf, 0x63, 0xc6, 0x91, 0x3f, 0x7e, 0xfc, 0xe5, 0xd7, 0xb3, 0x7b, 0xf6, 0xf1, 0xff,
+        0xe3, 0xdb, 0xab, 0x4b, 0x96, 0x31, 0x62, 0xc4, 0x95, 0x37, 0x6e, 0xdc, 0xa5, 0x57, 0xae, 0x41,
+        0x82, 0x19, 0x32, 0x64, 0xc8, 0x8d, 0x07, 0x0e, 0x1c, 0x38, 0x70, 0xe0, 0xdd, 0xa7, 0x53, 0xa6,
+        0x51, 0xa2, 0x59, 0xb2, 0x79, 0xf2, 0xf9, 0xef, 0xc3, 0x9b, 0x2b, 0x56, 0xac, 0x45, 0x8a, 0x09,
+        0x12, 0x24, 0x48, 0x90, 0x3d, 0x7a, 0xf4, 0xf5, 0xf7, 0xf3, 0xfb, 0xeb, 0xcb, 0x8b, 0x0b, 0x16,
+        0x2c, 0x58, 0xb0, 0x7d, 0xfa, 0xe9, 0xcf, 0x83, 0x1b, 0x36, 0x6c, 0xd8, 0xad, 0x47, 0x8e
+    };
+
+    // RFC 6330, Section 5.7.2 (https://www.rfc-editor.org/rfc/rfc6330#section-5.7.2)
+    // OCT_LOG[x] = i such that OCT_EXP[i] = x, stored as integers (256 elements)
+    private static final int[] OCT_LOG =
+    {
+        0x00, 0x00, 0x01, 0x19, 0x02, 0x32, 0x1a, 0xc6, 0x03, 0xdf, 0x33, 0xee, 0x1b, 0x68, 0xc7, 0x4b,
+        0x04, 0x64, 0xe0, 0x0e, 0x34, 0x8d, 0xef, 0x81, 0x1c, 0xc1, 0x69, 0xf8, 0xc8, 0x08, 0x4c, 0x71,
+        0x05, 0x8a, 0x65, 0x2f, 0xe1, 0x24, 0x0f, 0x21, 0x35, 0x93, 0x8e, 0xda, 0xf0, 0x12, 0x82, 0x45,
+        0x1d, 0xb5, 0xc2, 0x7d, 0x6a, 0x27, 0xf9, 0xb9, 0xc9, 0x9a, 0x09, 0x78, 0x4d, 0xe4, 0x72, 0xa6,
+        0x06, 0xbf, 0x8b, 0x62, 0x66, 0xdd, 0x30, 0xfd, 0xe2, 0x98, 0x25, 0xb3, 0x10, 0x91, 0x22, 0x88,
+        0x36, 0xd0, 0x94, 0xce, 0x8f, 0x96, 0xdb, 0xbd, 0xf1, 0xd2, 0x13, 0x5c, 0x83, 0x38, 0x46, 0x40,
+        0x1e, 0x42, 0xb6, 0xa3, 0xc3, 0x48, 0x7e, 0x6e, 0x6b, 0x3a, 0x28, 0x54, 0xfa, 0x85, 0xba, 0x3d,
+        0xca, 0x5e, 0x9b, 0x9f, 0x0a, 0x15, 0x79, 0x2b, 0x4e, 0xd4, 0xe5, 0xac, 0x73, 0xf3, 0xa7, 0x57,
+        0x07, 0x70, 0xc0, 0xf7, 0x8c, 0x80, 0x63, 0x0d, 0x67, 0x4a, 0xde, 0xed, 0x31, 0xc5, 0xfe, 0x18,
+        0xe3, 0xa5, 0x99, 0x77, 0x26, 0xb8, 0xb4, 0x7c, 0x11, 0x44, 0x92, 0xd9, 0x23, 0x20, 0x89, 0x2e,
+        0x37, 0x3f, 0xd1, 0x5b, 0x95, 0xbc, 0xcf, 0xcd, 0x90, 0x87, 0x97, 0xb2, 0xdc, 0xfc, 0xbe, 0x61,
+        0xf2, 0x56, 0xd3, 0xab, 0x14, 0x2a, 0x5d, 0x9e, 0x84, 0x3c, 0x39, 0x53, 0x47, 0x6d, 0x41, 0xa2,
+        0x1f, 0x2d, 0x43, 0xd8, 0xb7, 0x7b, 0xa4, 0x76, 0xc4, 0x17, 0x49, 0xec, 0x7f, 0x0c, 0x6f, 0xf6,
+        0x6c, 0xa1, 0x3b, 0x52, 0x29, 0x9d, 0x55, 0xaa, 0xfb, 0x60, 0x86, 0xb1, 0xbb, 0xcc, 0x3e, 0x5a,
+        0xcb, 0x59, 0x5f, 0xb0, 0x9c, 0xa9, 0xa0, 0x51, 0x0b, 0xf5, 0x16, 0xeb, 0x7a, 0x75, 0x2c, 0xd7,
+        0x4f, 0xae, 0xd5, 0xe9, 0xe6, 0xe7, 0xad, 0xe8, 0x74, 0xd6, 0xf4, 0xea, 0xa8, 0x50, 0x58, 0xaf
+    };
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private static BigInteger generateCoefficient()
+    /**
+     * Multiply two elements in GF(256)
+     */
+    private static int gf_mul( int a, int b )
     {
-        BigInteger coefficient;
-        do
-        {
-            byte[] randomBytes = new byte[256];
-            RANDOM.nextBytes( randomBytes );
-            coefficient = new BigInteger( 1, randomBytes );
-        }
-        while( coefficient.compareTo( PRIME ) >= 0 );
-        return coefficient;
+        if( a == 0 || b == 0 )
+            return 0;
+        return OCT_EXP[OCT_LOG[a] + OCT_LOG[b]];
     }
 
-    private static BigInteger secretToBigInteger( byte[] secret )
+    /**
+     * Divide two elements in GF(256)
+     * Returns -1 if b == 0 (should not happen with valid unique x)
+     */
+    private static int gf_div( int a, int b )
     {
-        byte[] prefixed = new byte[secret.length + 1];
-        prefixed[0] = 'S';
-        System.arraycopy( secret, 0, prefixed, 1, secret.length );
-        return new BigInteger( 1, prefixed );
-    }
-
-    private static byte[] bigIntegerToSecret( BigInteger value )
-    {
-        byte[] bytes = value.toByteArray();
-
-        int start = 0;
-        if( bytes.length > 0 && bytes[0] == 0 )
-            start = 1;
-
-        if( bytes.length - start < 1 || bytes[start] != 'S' )
-            return null;
-
-        int secretStart = start + 1;
-        int secretLength = bytes.length - secretStart;
-
-        if( secretLength == 0 )
-            return new byte[0];
-
-        byte[] secret = new byte[secretLength];
-        System.arraycopy( bytes, secretStart, secret, 0, secretLength );
-        return secret;
-    }
-
-    private static byte[] padTo256Bytes( BigInteger value )
-    {
-        byte[] bytes = value.toByteArray();
-        byte[] result = new byte[256];
-
-        int start = 0;
-        if( bytes.length > 0 && bytes[0] == 0 )
-            start = 1;
-
-        int length = bytes.length - start;
-        System.arraycopy( bytes, start, result, 256 - length, length );
-        return result;
+        if( b == 0 )
+            return -1;
+        if( a == 0 )
+            return 0;
+        return OCT_EXP[OCT_LOG[a] - OCT_LOG[b] + 255];
     }
 
     /**
      * Splits a secret into multiple shares using Shamir's Secret Sharing scheme.
      *
-     * @param secret the secret to share (up to 255 bytes)
-     * @param needed minimum number of shares required to recover the secret (must be at least 2)
-     * @param total  total number of shares to generate
-     * @return a map of share indices (1-based) to share bytes
-     * @throws IllegalArgumentException if parameters are invalid
+     * @param secret the secret to share
+     * @param needed minimum number of shares required to recover the secret (2..total)
+     * @param total  total number of shares to generate (needed..255)
+     * @return a map of share indices (1-based) to share bytes, or null on failure
      */
     public static Map<Integer, byte[]> share( byte[] secret, int needed, int total )
     {
-        if( secret == null )
-            throw new IllegalArgumentException( "Secret cannot be null" );
+        int len = secret.length;
 
-        if( secret.length > 255 )
-            throw new IllegalArgumentException( "Secret must be up to 255 bytes" );
+        if( len == 0 )
+            return null;
 
         if( needed < 2 )
-            throw new IllegalArgumentException( "Needed must be at least 2" );
+            return null;
 
         if( needed > total )
-            throw new IllegalArgumentException( "Needed cannot be greater than total" );
+            return null;
 
-        BigInteger secretValue = secretToBigInteger( secret );
+        if( total > 255 )
+            return null;
 
-        BigInteger[] coefficients = new BigInteger[needed];
-        coefficients[0] = secretValue;
-        for( int i = 1; i < needed; i++ )
-            coefficients[i] = generateCoefficient();
+        // Generate random coefficients for each byte position
+        // For each byte j: f_j( x ) = secret[j] + a1[j] * x + a2[j] * x ^ 2 + ... + a_{needed - 1}[j] * x ^ {needed - 1}
+        int rndLen = len * ( needed - 1 );
+        byte[] rnd = new byte[rndLen];
+        RANDOM.nextBytes( rnd );
 
+        // Build shares using inline Horner's method
         Map<Integer, byte[]> shares = new HashMap<>();
-        for( int x = 1; x <= total; x++ )
+        for( int x = 1; x <= total; ++x )
         {
-            BigInteger y = BigInteger.ZERO;
-            BigInteger xValue = BigInteger.valueOf( x );
-
-            for( int i = 0; i < needed; i++ )
+            int xLog = OCT_LOG[x];
+            byte[] y = new byte[len];
+            for( int j = 0; j < len; ++j )
             {
-                BigInteger term = coefficients[i].multiply( xValue.pow( i ) );
-                y = y.add( term );
+                // Horner: start from highest coefficient a_{needed - 1}
+                // res = a_{needed - 1}
+                // for k = needed - 2 down to 1: res = a_k XOR gf_mul( res, x )
+                // res = secret[j] XOR gf_mul( res, x )
+                int base = j * ( needed - 1 );
+                int res = rnd[base + needed - 2] & 0xFF; // a_{needed-1}
+
+                for( int k = needed - 3; k >= 0; --k )
+                {
+                    // res = a_{k + 1} XOR gf_mul( res, x )
+                    if( res != 0 )
+                        res = OCT_EXP[OCT_LOG[res] + xLog];
+                    res ^= rnd[base + k] & 0xFF;
+                }
+
+                // Final: res = secret[j] XOR gf_mul( res, x )
+                if( res != 0 )
+                    res = OCT_EXP[OCT_LOG[res] + xLog];
+                res ^= secret[j] & 0xFF;
+
+                y[j] = (byte) res;
             }
-
-            y = y.mod( PRIME );
-
-            shares.put( x, padTo256Bytes( y ) );
+            shares.put( x, y );
         }
 
         return shares;
@@ -139,49 +167,84 @@ public class Shamir255
     /**
      * Recovers the original secret from a set of shares using Lagrange interpolation.
      *
-     * @param shares a map of share indices to share bytes (must have at least 'needed' shares)
-     * @return the recovered secret
-     * @throws IllegalArgumentException if shares is null or empty
+     * @param shares a map of share indices to share bytes (must have at least 2 shares)
+     * @return the recovered secret, or null on failure
      */
     public static byte[] recover( Map<Integer, byte[]> shares )
     {
-        if( shares == null || shares.isEmpty() )
-            throw new IllegalArgumentException( "Shares cannot be null or empty" );
+        int count = shares.size();
+        if( count < 2 )
+            return null;
 
-        BigInteger secret = BigInteger.ZERO;
+        int[] xs = new int[count];
+        byte[][] ys = new byte[count][];
+        boolean[] seen = new boolean[256];
+        int len = -1;
+        int idx = 0;
 
-        for( Map.Entry<Integer, byte[]> entry1 : shares.entrySet() )
+        for( Map.Entry<Integer, byte[]> entry : shares.entrySet() )
         {
-            int xi = entry1.getKey();
-            BigInteger yi = new BigInteger( 1, entry1.getValue() );
+            int xi = entry.getKey();
 
-            BigInteger numerator = BigInteger.ONE;
-            BigInteger denominator = BigInteger.ONE;
+            if( xi < 1 || xi > 255 )
+                return null;
 
-            for( Map.Entry<Integer, byte[]> entry2 : shares.entrySet() )
+            if( seen[xi] )
+                return null;
+            seen[xi] = true;
+
+            byte[] y = entry.getValue();
+
+            if( y == null )
+                return null;
+
+            int ylen = y.length;
+            if( len == -1 )
             {
-                int xj = entry2.getKey();
-                if( xi != xj )
-                {
-                    numerator = numerator.multiply( BigInteger.valueOf( -xj ) );
-                    denominator = denominator.multiply( BigInteger.valueOf( xi - xj ) );
-                }
+                if( ylen == 0 )
+                    return null;
+                len = ylen;
             }
+            else if( ylen != len )
+                return null;
 
-            BigInteger lagrangeCoefficient = numerator
-                .multiply( denominator.modInverse( PRIME ) )
-                .mod( PRIME );
-
-            BigInteger term = yi.multiply( lagrangeCoefficient ).mod( PRIME );
-
-            secret = secret.add( term ).mod( PRIME );
+            xs[idx] = xi;
+            ys[idx] = y;
+            idx++;
         }
 
-        byte[] recovered = bigIntegerToSecret( secret );
+        // Precompute Lagrange coefficients for interpolation at x = 0
+        // L_i = prod( j != i ) x_j / ( x_j - x_i ) in GF(256)
+        int[] lambdas = new int[count];
+        for( int i = 0; i < count; ++i )
+        {
+            int xi = xs[i];
+            int num = 1;
+            int den = 1;
+            for( int j = 0; j < count; ++j )
+            {
+                if( i == j )
+                    continue;
+                int xj = xs[j];
+                num = gf_mul( num, xj );
+                den = gf_mul( den, xj ^ xi ); // x_j - x_i = x_j XOR x_i in GF(256)
+            }
+            int lambda = gf_div( num, den );
+            if( lambda == -1 )
+                return null;
+            lambdas[i] = lambda;
+        }
 
-        if( recovered == null )
-            throw new IllegalArgumentException( "Failed to recover secret: invalid shares" );
+        // Interpolate each byte position
+        byte[] secret = new byte[len];
+        for( int j = 0; j < len; ++j )
+        {
+            int sj = 0;
+            for( int i = 0; i < count; ++i )
+                sj ^= gf_mul( ys[i][j] & 0xFF, lambdas[i] );
+            secret[j] = (byte) sj;
+        }
 
-        return recovered;
+        return secret;
     }
 }
