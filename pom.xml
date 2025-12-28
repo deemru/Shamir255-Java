@@ -11,7 +11,7 @@
     <packaging>jar</packaging>
 
     <name>Shamir255</name>
-    <description>Shamir's Secret Sharing implementation for Java - splits secrets up to 255 bytes into shares using 2048-bit MODP group</description>
+    <description>Shamir's Secret Sharing implementation for Java over GF(256)</description>
     <url>https://github.com/deemru/Shamir255-Java</url>
 
     <licenses>
